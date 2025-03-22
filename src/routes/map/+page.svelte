@@ -1,13 +1,15 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
     import { browser } from '$app/environment';
+    import { transliterate } from 'transliteration';
+
 
     let mapContainer: HTMLDivElement | null = null;
     let map: any;
     let markers: any[] = [];
-    let selectedCategory = "all"; // Избрана категорија за филтер
+    let selectedCategory = "all"; 
+    let searchQuery = ""; // za koga prebaruvame po ime
 
-    // Функција за земање податоци од Overpass API
     const fetchOverpassData = async () => {
         const query = `
         [out:json];
@@ -28,52 +30,60 @@
         return data.elements;
     };
 
-    // Функција за ажурирање на маркерите според филтерот
+    // azuriranje spored filter
     const updateMarkers = async (locations: any[]) => {
-        const leaflet = await import('leaflet');
+    const leaflet = await import('leaflet');
 
-        // Отстрани ги сите постоечки маркери
-        markers.forEach(marker => map.removeLayer(marker));
-        markers = [];
+    markers.forEach(marker => map.removeLayer(marker));
+    markers = [];
 
-        // Дефинирање на икони за секоја категорија
-        const icons: { [key: string]: any } = {
-            restaurant: leaflet.icon({ iconUrl: '/icons/restaurant.png', iconSize: [32, 32] }),
-            cafe: leaflet.icon({ iconUrl: '/icons/cafe.png', iconSize: [36, 36] }),
-            bar: leaflet.icon({ iconUrl: '/icons/bar.png', iconSize: [32, 32] }),
-            pub: leaflet.icon({ iconUrl: '/icons/pub.png', iconSize: [32, 32] }),
-        };
-
-        // Филтрирање на локации според избраниот тип
-        const filteredLocations = locations.filter(location => {
-            if (selectedCategory === "all") return true;
-            return location.tags.amenity === selectedCategory;
-        });
-
-        filteredLocations.forEach((location: any) => {
-            if (location.lat && location.lon) {
-                // Избор на икона според категоријата
-                const category = location.tags.amenity || "restaurant"; // Дефолт за ресторан ако не е дадена категорија
-                const icon = icons[category] || icons['restaurant']; // Фалбек на ресторан ако не е најдена икона
-
-                const marker = leaflet.marker([location.lat, location.lon], { icon });
-
-                // Google Maps URL
-                const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.tags.name)}&near=${location.lat},${location.lon}&radius=1000`;
-
-                marker.bindPopup(`
-                    <strong>${location.tags.name || 'Unnamed Location'}</strong><br>
-                    <a href="${googleMapsUrl}" target="_blank">View on Google Maps</a>
-                `).addTo(map);
-
-                markers.push(marker);
-            }
-        });
-
-        console.log("Markers added:", markers.length);
+    const icons: { [key: string]: any } = {
+        restaurant: leaflet.icon({ iconUrl: '/icons/restaurant.png', iconSize: [32, 32] }),
+        cafe: leaflet.icon({ iconUrl: '/icons/cafe.png', iconSize: [36, 36] }),
+        bar: leaflet.icon({ iconUrl: '/icons/bar.png', iconSize: [32, 32] }),
+        pub: leaflet.icon({ iconUrl: '/icons/pub.png', iconSize: [32, 32] }),
     };
 
-    // Иницијализација на мапата
+    //spored kategorija i ime
+    const filteredLocations = locations.filter(location => {
+        const hasName = location.tags.name && location.tags.name.trim().length > 0;
+        if (!hasName) return false;
+
+        const locationNameTranslit = transliterate(location.tags.name.toLowerCase());
+        const searchQueryTranslit = transliterate(searchQuery.toLowerCase());
+
+        const matchesCategory = selectedCategory === "all" || location.tags.amenity === selectedCategory;
+        const matchesSearch = locationNameTranslit.includes(searchQueryTranslit);
+
+        return matchesCategory && matchesSearch;
+    });
+
+    filteredLocations.forEach((location: any) => {
+        if (location.lat && location.lon) {
+            const category = location.tags.amenity || "restaurant";
+            const icon = icons[category] || icons['restaurant'];
+
+            const marker = leaflet.marker([location.lat, location.lon], { icon });
+
+            const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.tags.name)}&near=${location.lat},${location.lon}&radius=1000`;
+
+            marker.bindPopup(`
+                <strong>${location.tags.name || 'Unnamed Location'}</strong><br>
+                <a href="${googleMapsUrl}" target="_blank">View on Google Maps</a>
+            `).addTo(map);
+
+            markers.push(marker);
+        }
+    });
+
+    console.log("Markers after search:", markers.length);
+    };
+    const handleSearch = async () => {
+        const locations = await fetchOverpassData();
+        await updateMarkers(locations);
+    };
+
+    // inicijalizacija na mapa
     onMount(async () => {
         if (browser && mapContainer) {
             const leaflet = await import('leaflet');
@@ -85,20 +95,17 @@
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' 
             }).addTo(map);
 
-            // Земи ги сите локации и прикажи ги според филтерот
             const locations = await fetchOverpassData();
             await updateMarkers(locations);
         }
     });
 
-    // Чистење на мапата при напуштање на страната
     onDestroy(() => {
         if (map) {
             map.remove();
         }
     });
 
-    // Функција која ќе ја повикаме кога корисникот ќе смени филтер
     const handleFilterChange = async (event: Event) => {
         selectedCategory = (event.target as HTMLSelectElement).value;
         const locations = await fetchOverpassData();
@@ -107,7 +114,6 @@
 </script>
 
 <main>
-    <!-- Филтер Dropdown -->
     <div class="filter-container">
         <label for="category-filter">Филтрирај по тип:</label>
         <select id="category-filter" on:change={handleFilterChange}>
@@ -118,8 +124,12 @@
             <option value="pub">Пабови</option>
         </select>
     </div>
+   
+<div class="search-container">
+    <label for="search">Пребарај по име:</label>
+    <input id="search" type="text" bind:value={searchQuery} on:input={handleSearch} placeholder="Внесете име...">
+</div>
 
-    <!-- Мапа -->
     <div class="map-container" bind:this={mapContainer}></div>
 </main>
 
@@ -140,4 +150,15 @@
         width: 100%;
         height: 600px;
     }
+    .search-container {
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.search-container input {
+    padding: 5px;
+    font-size: 16px;
+    width: 200px;
+}
+
 </style>
