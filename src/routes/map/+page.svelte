@@ -1,39 +1,39 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
-    import { browser } from '$app/environment';
-    import { transliterate } from 'transliteration';
+import { browser } from '$app/environment';
+import { transliterate } from 'transliteration';
 
+let mapContainer: HTMLDivElement | null = null;
+let map: any;
+let markers: any[] = [];
+let selectedCategory = "all";
+let searchQuery = "";
 
-    let mapContainer: HTMLDivElement | null = null;
-    let map: any;
-    let markers: any[] = [];
-    let selectedCategory = "all"; 
-    let searchQuery = ""; // za koga prebaruvame po ime
+// чита category од URL 
+$: if (browser) {
+    const urlParams = new URLSearchParams(window.location.search);
+    selectedCategory = urlParams.get('category') || "all";
+}
 
-    const fetchOverpassData = async () => {
-        const query = `
-        [out:json];
-        area[name="Скопје"]->.a;
-        (
-          node["amenity"="restaurant"](area.a);
-          node["amenity"="cafe"](area.a);
-          node["amenity"="bar"](area.a);
-          node["amenity"="pub"](area.a);
-        );
-        out body;
-        `;
+const fetchOverpassData = async () => {
+    const query = `
+    [out:json];
+    area[name="Скопје"]->.a;
+    (
+      node["amenity"="restaurant"](area.a);
+      node["amenity"="cafe"](area.a);
+      node["amenity"="bar"](area.a);
+      node["amenity"="pub"](area.a);
+    );
+    out body;
+    `;
+    const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+    const data = await response.json();
+    return data.elements;
+};
 
-        const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
-        const response = await fetch(overpassUrl);
-        const data = await response.json();
-
-        return data.elements;
-    };
-
-    // azuriranje spored filter
-    const updateMarkers = async (locations: any[]) => {
+const updateMarkers = async (locations: any[]) => {
     const leaflet = await import('leaflet');
-
     markers.forEach(marker => map.removeLayer(marker));
     markers = [];
 
@@ -44,7 +44,6 @@
         pub: leaflet.icon({ iconUrl: '/icons/pub.png', iconSize: [32, 32] }),
     };
 
-    //spored kategorija i ime
     const filteredLocations = locations.filter(location => {
         const hasName = location.tags.name && location.tags.name.trim().length > 0;
         if (!hasName) return false;
@@ -58,17 +57,16 @@
         return matchesCategory && matchesSearch;
     });
 
-    filteredLocations.forEach((location: any) => {
+    filteredLocations.forEach(location => {
         if (location.lat && location.lon) {
             const category = location.tags.amenity || "restaurant";
             const icon = icons[category] || icons['restaurant'];
 
             const marker = leaflet.marker([location.lat, location.lon], { icon });
-
             const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.tags.name)}&near=${location.lat},${location.lon}&radius=1000`;
 
             marker.bindPopup(`
-                <strong>${location.tags.name || 'Unnamed Location'}</strong><br>
+                <strong>${location.tags.name}</strong><br>
                 <a href="${googleMapsUrl}" target="_blank">View on Google Maps</a>
             `).addTo(map);
 
@@ -76,61 +74,70 @@
         }
     });
 
-    console.log("Markers after search:", markers.length);
-    };
-    const handleSearch = async () => {
+    console.log("Markers updated:", markers.length);
+};
+
+const handleFilterChange = async (event: Event) => {
+    selectedCategory = (event.target as HTMLSelectElement).value;
+    const url = new URL(window.location.href);
+    url.searchParams.set('category', selectedCategory);
+    window.history.pushState({}, "", url);
+    const locations = await fetchOverpassData();
+    await updateMarkers(locations);
+};
+
+const handleSearch = async () => {
+    const locations = await fetchOverpassData();
+    await updateMarkers(locations);
+};
+
+onMount(async () => {
+    if (browser && mapContainer) {
+        const leaflet = await import('leaflet');
+        await import('leaflet/dist/leaflet.css');
+
+        map = leaflet.map(mapContainer).setView([41.9981, 21.4254], 13);
+
+        leaflet.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
         const locations = await fetchOverpassData();
         await updateMarkers(locations);
-    };
+    }
+});
+$: if (browser && map && selectedCategory) {
+    fetchOverpassData().then(updateMarkers);
+}
 
-    // inicijalizacija na mapa
-    onMount(async () => {
-        if (browser && mapContainer) {
-            const leaflet = await import('leaflet');
-            await import('leaflet/dist/leaflet.css');
 
-            map = leaflet.map(mapContainer).setView([41.9981, 21.4254], 13);
+onDestroy(() => {
+    if (map) map.remove();
+});
 
-            leaflet.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' 
-            }).addTo(map);
-
-            const locations = await fetchOverpassData();
-            await updateMarkers(locations);
-        }
-    });
-
-    onDestroy(() => {
-        if (map) {
-            map.remove();
-        }
-    });
-
-    const handleFilterChange = async (event: Event) => {
-        selectedCategory = (event.target as HTMLSelectElement).value;
-        const locations = await fetchOverpassData();
-        await updateMarkers(locations);
-    };
 </script>
 
 <main>
     <div class="filter-container">
-        <label for="category-filter">Филтрирај по тип:</label>
-        <select id="category-filter" on:change={handleFilterChange}>
-            <option value="all">Сите</option>
-            <option value="restaurant">Ресторани</option>
-            <option value="cafe">Кафулиња</option>
-            <option value="bar">Барови</option>
-            <option value="pub">Пабови</option>
+        <label for="category-filter">Filter by Type:</label>
+        <select id="category-filter" on:change={handleFilterChange} bind:value={selectedCategory}>
+            <option value="all">All</option>
+            <option value="restaurant">Restaurants</option>
+            <option value="cafe">Cafes</option>
+            <option value="bar">Bars</option>
+            <option value="pub">Pubs</option>
         </select>
     </div>
-   
-<div class="search-container">
-    <label for="search">Пребарај по име:</label>
-    <input id="search" type="text" bind:value={searchQuery} on:input={handleSearch} placeholder="Внесете име...">
-</div>
-
+    
+    <!-- Search bar -->
+    <div class="search-container">
+        <input type="text" bind:value={searchQuery} placeholder="Search by name..." />
+        <button on:click={handleSearch}>Search</button>
+    </div>
+    
+    <!-- Map -->
     <div class="map-container" bind:this={mapContainer}></div>
+    
 </main>
 
 <style>
