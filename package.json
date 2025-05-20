@@ -25,6 +25,7 @@
 		"vite": "^6.0.0"
 	},
 	"dependencies": {
+		"@supabase/supabase-js": "^2.49.4",
 		"@types/leaflet": "^1.9.16",
 		"transliteration": "^2.3.5"
 	}
