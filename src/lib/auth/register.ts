@@ -16,14 +16,14 @@ export const register = async (email: string, password: string) => {
     return { error: new Error("Нема user објект во одговорот.") };
   }
 
-  // Креирај празен профил ред
   const { error: profileError } = await supabase
     .from('profiles')
     .insert([
       {
         user_id: user.id,
-        full_name: '',
-        phone: ''
+        name: '',
+        surname: '',
+        email: ''
       }
     ]);
 

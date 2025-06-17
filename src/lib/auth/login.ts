@@ -16,7 +16,6 @@ export const login = async (email: string, password: string) => {
     return { error: new Error("Најавата успеа, но нема user објект.") };
   }
 
-  // Земи го профилот од базата
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('*')

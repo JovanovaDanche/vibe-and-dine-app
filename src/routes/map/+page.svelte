@@ -8,7 +8,11 @@ import { browser } from '$app/environment';
 import { transliterate } from 'transliteration';
 import { getUserLocation } from '$lib/usersLocation';
 import type { UserLocation } from '$lib/usersLocation';
-
+import { toggleFavorite } from '$lib/utils/favorites';
+import { supabase } from '$lib/supabaseClient';
+import type { PlaceLocation } from '$lib/utils/favorites';
+import { submitRating } from '$lib/utils/ratings';
+export let data;
 let mapContainer: HTMLDivElement | null = null;
 let map: any;
 let markers: any[] = [];
@@ -19,11 +23,32 @@ let userLocation: UserLocation | null = null;
 let isNearMeActive = false;
 
 
-// chita category od URL 
+
 $: if (browser) {
     const urlParams = new URLSearchParams(window.location.search);
     selectedCategory = urlParams.get('category') || "all";
 }
+
+async function getAverageRating(placeId: string): Promise<{ average: number; count: number }> {
+  const { data, error } = await supabase
+    .from('ratings')
+    .select('rating')
+    .eq('place_id', placeId);
+
+  if (error || !data || data.length === 0) {
+    return { average: 0, count: 0 };
+  }
+
+  const count = data.length;
+  const total = data.reduce((sum, r) => sum + r.rating, 0); 
+  const average = total / count;
+
+  return {
+    average: parseFloat(average.toFixed(1)),
+    count
+  };
+}
+
 
 const fetchOverpassData = async () => {
     const query = `
@@ -41,6 +66,8 @@ const fetchOverpassData = async () => {
     const data = await response.json();
     return data.elements;
 };
+
+
 
 const updateMarkers = async (locations: any[]) => {
     const leaflet = await import('leaflet');
@@ -89,22 +116,78 @@ const updateMarkers = async (locations: any[]) => {
 }
 
 
-    filteredLocations.forEach(location => {
-        if (location.lat && location.lon) {
-            const category = location.tags.amenity || "restaurant";
-            const icon = icons[category] || icons['restaurant'];
+  filteredLocations.forEach(location => {
+  if (location.lat && location.lon) {
+    const category = location.tags.amenity || "restaurant";
+    const icon = icons[category] || icons['restaurant'];
+    const marker = leaflet.marker([location.lat, location.lon], { icon });
+    const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.tags.name)}&near=${location.lat},${location.lon}&radius=1000`;
 
-            const marker = leaflet.marker([location.lat, location.lon], { icon });
-            const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.tags.name)}&near=${location.lat},${location.lon}&radius=1000`;
+    const placeId = location.id || `${location.lat}-${location.lon}`;
 
-            marker.bindPopup(`
-                <strong>${location.tags.name}</strong><br>
-                <a href="${googleMapsUrl}" target="_blank">View on Google Maps</a>
-            `).addTo(map);
+    const popupContent = document.createElement('div');
+   popupContent.innerHTML = `
+    <div class="popup-wrapper">
+      <div class="popup-header">
+        <strong class="popup-title">${location.tags.name}</strong>
+        <div class="avg-rating">Average rating: loading...</div>
+      </div>
 
-            markers.push(marker);
-        }
+      <a href="${googleMapsUrl}" target="_blank">View on Google Maps</a><br>
+
+      <button class="favorite-btn">♡ Add to Favorites</button><br><br>
+
+      <label class="rate-label">Rate this place:</label>
+      <div class="star-rating">
+        ${[1, 2, 3, 4, 5].map(i => `<span data-value="${i}" class="star">☆</span>`).join('')}
+      </div>
+      
+      <button class="submit-rating-btn">Submit Rating</button>
+    </div>
+  `;
+
+    getAverageRating(placeId).then(({ average, count }) => {
+  const avgEl = popupContent.querySelector('.avg-rating');
+  if (avgEl) {
+    const roundedStars = Math.round(average); 
+    const stars = '★★★★★☆☆☆☆☆'.slice(5 - roundedStars, 10 - roundedStars);
+    avgEl.textContent = `${average} ${stars} (${count})`;
+  }
+});
+
+
+    let selectedRating = 0;
+    const stars = popupContent.querySelectorAll('.star-rating .star');
+    stars.forEach(star => {
+      star.addEventListener('click', () => {
+        selectedRating = Number((star as HTMLElement).dataset.value);
+        stars.forEach((s, i) => {
+          s.textContent = i < selectedRating ? '★' : '☆';
+        });
+      });
     });
+
+ 
+    popupContent.querySelector('.favorite-btn')?.addEventListener('click', () => {
+      window.dispatchEvent(new CustomEvent('add-favorite', { detail: location }));
+    });
+
+
+    popupContent.querySelector('.submit-rating-btn')?.addEventListener('click', () => {
+      if (!selectedRating || selectedRating < 1 || selectedRating > 5) {
+        alert('Please click on a star to rate.');
+        return;
+      }
+
+      window.dispatchEvent(new CustomEvent('rate-location', {
+        detail: { location: { ...location, id: placeId }, rating: selectedRating }
+      }));
+    });
+
+    marker.bindPopup(popupContent).addTo(map);
+    markers.push(marker);
+  }
+});
 
     console.log("Markers updated:", markers.length);
 };
@@ -123,21 +206,60 @@ const handleSearch = async () => {
     await updateMarkers(locations);
 };
 
-onMount(async () => {
-    if (browser && mapContainer) {
-        const leaflet = await import('leaflet');
-        await import('leaflet/dist/leaflet.css');
+let user: any = null;
 
-        map = leaflet.map(mapContainer).setView([41.9981, 21.4254], 13);
+onMount(() => {
+  if (browser && mapContainer) {
+    (async () => {
+      const leaflet = await import('leaflet');
+      await import('leaflet/dist/leaflet.css');
 
-        leaflet.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(map);
+      map = leaflet.map(mapContainer).setView([41.9981, 21.4254], 13);
 
-        const locations = await fetchOverpassData();
-        await updateMarkers(locations);
-    }
+      leaflet.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      const locations = await fetchOverpassData();
+      await updateMarkers(locations);
+
+
+      let userProfile = data.profile;
+
+
+      window.addEventListener('add-favorite', (event) => {
+        if (!userProfile) {
+          alert('You must be logged in to save favorites.');
+          return;
+        }
+
+        const location = (event as CustomEvent).detail;
+        toggleFavorite(userProfile.user_id, location)
+          .then(() => alert('Saved to favorites!'))
+          .catch((err) => alert('Error: ' + err.message));
+      });
+
+
+      window.addEventListener('rate-location', async (event) => {
+        if (!userProfile) {
+          alert('You must be logged in to rate places.');
+          return;
+        }
+
+        const { location, rating } = (event as CustomEvent).detail;
+
+        try {
+          await submitRating(userProfile.user_id, location, rating);
+          alert('Rating submitted!');
+        } catch (err) {
+          const error = err as Error;
+          alert('Error submitting rating: ' + error.message);
+        }
+      });
+    })(); 
+  }
 });
+
 $: if (browser && map && selectedCategory) {
     fetchOverpassData().then(updateMarkers);
 }
@@ -158,6 +280,12 @@ const toggleNearMe = async () => {
     await updateMarkers(locations);
 };
 
+const rataingSearch = async () => {
+    
+
+};
+
+
 
 onDestroy(() => {
     if (map) map.remove();
@@ -165,27 +293,35 @@ onDestroy(() => {
 
 </script>
 
-<main>
+<main class="main-layout">
+  <div class="sidebar">
     <div class="filter-container">
-        <label for="category-filter">Filter by Type:</label>
-        <select id="category-filter" on:change={handleFilterChange} bind:value={selectedCategory}>
-            <option value="all">All</option>
-            <option value="restaurant">Restaurants</option>
-            <option value="cafe">Cafes</option>
-            <option value="bar">Bars</option>
-            <option value="pub">Pubs</option>
-        </select>
-        <button on:click={toggleNearMe}>Near Me</button>
+      <label for="category-filter">Filter by Type:</label>
+      <select id="category-filter" on:change={handleFilterChange} bind:value={selectedCategory}>
+        <option value="all">All</option>
+        <option value="restaurant">Restaurants</option>
+        <option value="cafe">Cafes</option>
+        <option value="bar">Bars</option>
+        <option value="pub">Pubs</option>
+      </select>
     </div>
-    
-    <!-- Search bar -->
+
+    <div class="near-me-toggle">
+      <label class="switch">
+        <input type="checkbox" on:change={toggleNearMe} />
+        <span class="slider"></span>
+      </label>
+      <span>Near Me</span>
+    </div>
+
     <div class="search-container">
-        <input type="text" bind:value={searchQuery} placeholder="Search by name..." />
-        <button on:click={handleSearch}>Search</button>
+      <input type="text" bind:value={searchQuery} placeholder="Search by name..." />
+      <button on:click={handleSearch}>Search</button>
     </div>
-    <!-- Map -->
-    <div class="map-container" bind:this={mapContainer}></div>
-    
+ 
+  </div>
+
+  <div class="map-container" bind:this={mapContainer}></div>
 </main>
 
 <style>
