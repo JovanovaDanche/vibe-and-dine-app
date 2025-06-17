@@ -13,7 +13,7 @@
       <input name="password" type="password" required placeholder="Password" />
       <button type="submit">Log in</button>
     </form>
-
+    <p>Not registered?  <span><a href="/register">Create an account</a></span></p>
     {#if form?.error}
       <p class="error">{form.error}</p>
     {/if}

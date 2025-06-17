@@ -15,11 +15,17 @@
     <div class="form-box">
       <h2>Create your account</h2>
       <form method="POST">
-        <label for="fullName">Name and surname</label>
-        <input name="fullName" id="fullName" placeholder="Name and surname" required />
+       <div class="name-surname-group">
+          <div class="input-half">
+            <label for="name">Name</label>
+            <input name="name" id="name" placeholder="Your name.." required />
+          </div>
 
-        <label for="phone">Phone number</label>
-        <input name="phone" id="phone" placeholder="Phone number" />
+          <div class="input-half">
+            <label for="surname">Surname</label>
+            <input name="surname" id="surname" placeholder="Your surname" required />
+          </div>
+        </div>
 
         <label for="email">Email</label>
         <input type="email" name="email" id="email" placeholder="Email" required />

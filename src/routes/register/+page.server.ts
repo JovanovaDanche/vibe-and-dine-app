@@ -7,8 +7,8 @@ export const actions: Actions = {
     const form = await request.formData();
     const email = form.get('email') as string;
     const password = form.get('password') as string;
-    const fullName = form.get('fullName') as string;
-    const phone = form.get('phone') as string;
+    const name =form.get('name') as string;
+    const surname =form.get('surname') as string;
 
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -30,8 +30,9 @@ export const actions: Actions = {
 
     const { error: profileError } = await supabase.from('profiles').insert({
       user_id: userId,
-      full_name: fullName,
-      phone: phone
+      name: name,
+      surname: surname,
+      email:email
     });
 
     if (profileError) {
