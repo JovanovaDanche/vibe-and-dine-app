@@ -142,3 +142,28 @@ h3 {
   text-align: center;
   user-select: none;
 }
+.remove-btn {
+  background: linear-gradient(135deg,#f02323, #f02323);
+  border: none;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: all 0.25s ease;
+  margin-top: 6px;
+  box-shadow: 0 4px 10px rgba(255, 0, 21, 0.3);
+  display: inline-block;
+}
+
+.remove-btn:hover {
+  background: linear-gradient(135deg, #ff4757, #e84118);
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 6px 14px rgba(255, 71, 87, 0.4);
+}
+
+.remove-btn:active {
+  transform: translateY(0) scale(0.97);
+  box-shadow: 0 2px 6px rgba(255, 71, 87, 0.2);
+}
