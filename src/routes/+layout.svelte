@@ -3,7 +3,7 @@
 
   import { page } from '$app/stores';
   $: currentRoute = $page.url.pathname;
-  $: hideLayout = ['/login', '/register'].includes(currentRoute);
+  $: hideLayout = ['/login', '/register','/logout'].includes(currentRoute);
 
   let dropdownOpen = false;
 
