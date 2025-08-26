@@ -115,6 +115,7 @@ input:checked + .slider {
 input:checked + .slider:before {
   transform: translateX(22px);
 }
+
 .leaflet-popup-content {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   font-size: 14px;
@@ -129,7 +130,6 @@ input:checked + .slider:before {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-/* --- Title --- */
 .leaflet-popup-content strong {
   display: block;
   font-size: 16px;
@@ -138,12 +138,12 @@ input:checked + .slider:before {
 
 }
 
-/* --- Google Maps link --- */
 .leaflet-popup-content a {
   color: #3498db;
   font-size: 13px;
   text-decoration: none;
 }
+
 .leaflet-popup-content a:hover {
   text-decoration: underline;
 }
@@ -219,4 +219,55 @@ input:checked + .slider:before {
   background-color: #f04e4e;
   color: #ffffff;
   transform: scale(1.05);
+}
+.rating-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 1rem;
+  font-family: "Segoe UI", Roboto, sans-serif;
+}
+
+.rating-filter label {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #333;
+}
+
+.stars {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.star {
+  font-size: 1.5rem;
+  color: #ccc;
+  cursor: pointer;
+  transition: transform 0.15s ease, color 0.2s ease;
+}
+
+.star:hover {
+  transform: scale(1.2);
+  color: #ffa500;
+}
+
+.star.active {
+  color: #ff9800;
+}
+
+.reset {
+  margin-left: 10px;
+  margin-top: 8px;
+  background: #eee;
+  border: none;
+  border-radius: 10px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: background 0.2s;
+}
+
+.reset:hover {
+  background: #ddd;
 }
